@@ -31,6 +31,7 @@ func (c *Conn) handleData(ctx context.Context, data *messages.Data) {
 		c.errChan <- ErrFailedToPeelOff
 		return
 	}
+	// fmt.Println("data, serve event")
 	e := &ServeEvent{
 		PD: pd,
 		Id: c.id,
@@ -45,8 +46,11 @@ func (c *Conn) handleData(ctx context.Context, data *messages.Data) {
 		c.cfg.DefaultDPC = pd.OriginatingPointCode
 	}
 
+	// fmt.Println("preparing to send event")
+
 	select {
 	case c.serviceChan <- e:
+		// fmt.Println("event sent")
 		return
 	case <-ctx.Done():
 		return

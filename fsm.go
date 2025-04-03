@@ -41,6 +41,7 @@ func (c *Conn) handleStateUpdate(current State) error {
 		return nil
 	case modeServer:
 		if err := c.handleStateUpdateAsServer(current, previous); err != nil {
+			fmt.Println("handleStateUpdateAsServer", err)
 			return err
 		}
 		return nil
@@ -50,7 +51,7 @@ func (c *Conn) handleStateUpdate(current State) error {
 }
 
 func (c *Conn) handleStateUpdateAsClient(current, previous State) error {
-	fmt.Println("handle:", current, previous)
+	// fmt.Println("handle:", current, previous)
 
 	switch current {
 	case StateAspDown:
@@ -71,6 +72,10 @@ func (c *Conn) handleStateUpdateAsClient(current, previous State) error {
 			c.established <- struct{}{}
 			c.beatAllow.Broadcast()
 		}
+
+		// fixme!!!
+		c.sctpInfo.Stream = 1
+
 		return nil
 	case StateSCTPCDI, StateSCTPRI:
 		return ErrSCTPNotAlive
@@ -102,7 +107,7 @@ func (c *Conn) handleStateUpdateAsServer(current, previous State) error {
 }
 
 func (c *Conn) handleSignals(ctx context.Context, m3 messages.M3UA) {
-	fmt.Println("sig:", c.state, m3.MessageClassName(), m3.MessageTypeName(), m3.MessageClass(), m3.MessageType())
+	//fmt.Println("sig:", c.state, m3.MessageClassName(), m3.MessageTypeName(), m3.MessageClass(), m3.MessageType())
 	select {
 	case <-ctx.Done():
 		return
@@ -148,9 +153,30 @@ func (c *Conn) handleSignals(ctx context.Context, m3 messages.M3UA) {
 		}
 		c.stateChan <- StateAspActive
 	case *messages.AspActiveAck:
-		if err := c.handleAspActiveAck(msg); err != nil {
-			// c.errChan <- err
-		}
+		/*
+			if err := c.handleAspActiveAck(msg); err != nil {
+				// c.errChan <- err
+			}
+		*/
+		s := &params.Param{}
+		s.Tag = params.RegistrationResult
+		s.Length = 8
+		s.Data = []byte{0x0, 0xd, 0x0, 0x8, 0x0, 0x1, 0x0, 0x3}
+
+		x := &params.Param{}
+		x.Tag = params.RegistrationResult
+		x.Length = 8
+		x.Data = []byte{0x0, 0x6, 0x0, 0x8, 0x0, 0x0, 0x0, 0x6}
+
+		/*
+			if _, err := c.WriteSignal(
+				messages.NewNotify(s, nil, x, nil),
+			); err != nil {
+				c.errChan <- err
+				return
+			}
+		*/
+
 		c.stateChan <- StateAspActive
 	case *messages.AspInactive:
 		if err := c.handleAspInactive(msg); err != nil {
@@ -188,6 +214,38 @@ func (c *Conn) handleSignals(ctx context.Context, m3 messages.M3UA) {
 		// Others: SSNM and RKM is not implemented.
 	case *messages.RegReq:
 		fmt.Println("req")
+
+		p := &params.Param{}
+		p.Tag = params.RegistrationResult
+		p.Length = 28
+		p.Data = []byte{0x2, 0x8, 0x0, 0x1c, 0x2, 0xa, 0x0, 0x8, 0x0, 0x0, 0x0, 0x1, 0x2, 0x12, 0x0, 0x8, 0x0, 0x0, 0x0, 0x0, 0x0, 0x6, 0x0, 0x8, 0x0, 0x0, 0x0, 0x6}
+
+		if _, err := c.WriteSignal(
+			messages.NewRegRsp(p),
+		); err != nil {
+			c.errChan <- err
+			return
+		}
+
+		s := &params.Param{}
+		s.Tag = params.RegistrationResult
+		s.Length = 8
+		s.Data = []byte{0x0, 0xd, 0x0, 0x8, 0x0, 0x1, 0x0, 0x2}
+
+		x := &params.Param{}
+		x.Tag = params.RegistrationResult
+		x.Length = 8
+		x.Data = []byte{0x0, 0x6, 0x0, 0x8, 0x0, 0x0, 0x0, 0x6}
+
+		/*
+			if _, err := c.WriteSignal(
+				messages.NewNotify(s, nil, x, nil),
+			); err != nil {
+				c.errChan <- err
+				return
+			}
+		*/
+
 		c.stateChan <- c.state
 
 	case *messages.RegRsp:
@@ -216,6 +274,8 @@ func (c *Conn) handleSignals(ctx context.Context, m3 messages.M3UA) {
 }
 
 func (c *Conn) monitor(ctx context.Context) {
+	fmt.Println("new monitor", c.mode, c.id)
+	defer fmt.Println("monitor done", c.mode, c.id)
 	c.errChan = make(chan error)
 	c.beatAckChan = make(chan struct{})
 
@@ -228,6 +288,7 @@ func (c *Conn) monitor(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			fmt.Println("monitor, ctx done")
 			c.Close()
 			return
 		case err := <-c.errChan:
@@ -236,11 +297,15 @@ func (c *Conn) monitor(ctx context.Context) {
 				c.Close()
 				return
 			}
-			continue
+			// continue
+			fmt.Println("closing anyway")
+			c.Close()
+			return
 		case state := <-c.stateChan:
 			// Act properly based on current state.
 			if err := c.handleStateUpdate(state); err != nil {
 				if errors.Is(err, ErrSCTPNotAlive) {
+					fmt.Println("monitor, handleStateUpdate", err)
 					c.Close()
 					return
 				}
@@ -249,6 +314,7 @@ func (c *Conn) monitor(ctx context.Context) {
 			// Read from conn to see something coming from the peer.
 			n, _, err := c.sctpConn.SCTPRead(buf)
 			if err != nil {
+				fmt.Println("monitor, sctp read", err)
 				c.Close()
 				return
 			}

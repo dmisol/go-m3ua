@@ -16,7 +16,7 @@ import (
 //
 // After successfully established the connection with peer, state-changing
 // signals and heartbeats are automatically handled background in another goroutine.
-func Dial(ctx context.Context, net string, laddr, raddr *sctp.SCTPAddr, cfg *Config, q chan *ServeEvent) (*Conn, error) {
+func Dial(ctx context.Context, net string, laddr, raddr *sctp.SCTPAddr, cfg *Config, q chan *ServeEvent, id int) (*Conn, error) {
 	var err error
 	conn := &Conn{
 		mode:        modeClient,
@@ -26,6 +26,7 @@ func Dial(ctx context.Context, net string, laddr, raddr *sctp.SCTPAddr, cfg *Con
 		cfg:         cfg,
 
 		serviceChan: q,
+		id:          id,
 	}
 
 	if conn.cfg.HeartbeatInfo.Interval == 0 {

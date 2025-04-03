@@ -94,8 +94,9 @@ func (c *Conn) WriteToStream(p *params.Param, streamID uint16) (n int, err error
 	if c.state != StateAspActive {
 		return 0, ErrNotEstablished
 	}
+	// c.cfg.NetworkAppearance, c.cfg.RoutingContexts, p, c.cfg.CorrelationID,
 	d, err := messages.NewData(
-		c.cfg.NetworkAppearance, c.cfg.RoutingContexts, p, c.cfg.CorrelationID,
+		nil, c.cfg.RoutingContexts, p, c.cfg.CorrelationID,
 	).MarshalBinary()
 	if err != nil {
 		return 0, err

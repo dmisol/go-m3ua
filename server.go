@@ -41,6 +41,7 @@ func Listen(net string, laddr *sctp.SCTPAddr, cfg *Config) (*Listener, error) {
 // After successfully established the association with peer, Payload can be read with Read() func.
 // Other signals are automatically handled background in another goroutine.
 func (l *Listener) Accept(ctx context.Context, q chan *ServeEvent, id int) (*Conn, error) {
+	defer fmt.Println("server accept done", id)
 	conn := &Conn{
 		mode:        modeServer,
 		stateChan:   make(chan State),
@@ -58,27 +59,35 @@ func (l *Listener) Accept(ctx context.Context, q chan *ServeEvent, id int) (*Con
 
 	c, err := l.sctpListener.Accept()
 	if err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 
 	var ok bool
 	conn.sctpConn, ok = c.(*sctp.SCTPConn)
 	if !ok {
-		return nil, errors.New("failed to assert conn")
+		err = errors.New("failed to assert conn")
+		fmt.Println("monitor accept", err)
+		return nil, err
 	}
 
 	go func() {
 		conn.stateChan <- StateAspDown
 	}()
 
+	fmt.Println("monitor conn is", c)
 	go conn.monitor(ctx)
 	select {
 	case _, ok := <-conn.established:
+		fmt.Println("established")
 		if !ok {
+			fmt.Println("not ok")
+			conn.sctpConn.Close()
 			return nil, ErrFailedToEstablish
 		}
 		return conn, nil
-	case <-time.After(10 * time.Second):
+	case <-time.After(30 * time.Second):
+		fmt.Println("srv accept TO")
 		return nil, ErrTimeout
 	}
 }

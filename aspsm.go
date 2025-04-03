@@ -4,7 +4,11 @@
 
 package m3ua
 
-import "github.com/dmisol/go-m3ua/messages"
+import (
+	"fmt"
+
+	"github.com/dmisol/go-m3ua/messages"
+)
 
 func (c *Conn) initiateASPSM() error {
 	if _, err := c.WriteSignal(
@@ -17,10 +21,11 @@ func (c *Conn) initiateASPSM() error {
 }
 func (c *Conn) handleAspUp(aspUp *messages.AspUp) error {
 	if c.state != StateAspDown {
-		return NewErrUnexpectedMessage(aspUp)
-
+		// return NewErrUnexpectedMessage(aspUp)
+		fmt.Println("handleAspUp, was error here:", NewErrUnexpectedMessage(aspUp))
 	}
 	if c.sctpInfo.Stream != 0 {
+		fmt.Println("handleAspUp, c.sctpInfo.Stream != 0")
 		return NewErrInvalidSCTPStreamID(c.sctpInfo.Stream)
 	}
 
@@ -30,9 +35,11 @@ func (c *Conn) handleAspUp(aspUp *messages.AspUp) error {
 			nil,
 		),
 	); err != nil {
+		fmt.Println("handleAspUp, WriteSignal(NewAspUpAck)", err)
 		return err
 	}
 
+	fmt.Println("AspUpAck sent")
 	return nil
 }
 
